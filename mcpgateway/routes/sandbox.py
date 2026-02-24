@@ -17,6 +17,7 @@ from __future__ import annotations
 
 # Standard
 import logging
+import re
 from typing import Optional
 
 # Third-Party
@@ -40,6 +41,10 @@ from ..services.sandbox_service import get_sandbox_service, SandboxService
 
 logger = logging.getLogger(__name__)
 
+# Service version constant - used in health check and info endpoints
+SANDBOX_SERVICE_VERSION = "1.0.0"
+SANDBOX_SERVICE_NAME = "Policy Testing Sandbox"
+
 # Create router with prefix and tags
 router = APIRouter(
     prefix="/sandbox",
@@ -54,88 +59,6 @@ router = APIRouter(
 # ---------------------------------------------------------------------------
 # Core Simulation Endpoints
 # ---------------------------------------------------------------------------
-
-#
-# @router.post(
-#     "/simulate",
-#     response_model=SimulationResult,
-#     status_code=status.HTTP_200_OK,
-#     summary="Simulate single test case",
-#     description="""
-#     Simulate a single test case against a policy draft.
-#
-#     This endpoint creates an isolated PDP instance with the draft policy,
-#     evaluates the test case, and returns detailed results including whether
-#     the test passed and a full explanation of the decision.
-#
-#     **Use case**: Test a specific access scenario before deploying a policy change.
-#
-#     **Example**:
-#     ```json
-#     {
-#         "policy_draft_id": "draft-123",
-#         "test_case": {
-#             "subject": {"email": "dev@example.com", "roles": ["developer"]},
-#             "action": "tools.invoke",
-#             "resource": {"type": "tool", "id": "db-query"},
-#             "expected_decision": "allow"
-#         },
-#         "include_explanation": true
-#     }
-#     ```
-#     """,
-# )
-# async def simulate_single_request(
-#     request: SimulateRequest,
-#     sandbox: SandboxService = Depends(get_sandbox_service),
-# ) -> SimulationResult:
-#     """Simulate a single test case against a policy draft.
-#
-#     Args:
-#         request: Simulation request containing policy draft ID and test case
-#         sandbox: Injected sandbox service
-#
-#     Returns:
-#         SimulationResult with actual vs expected decision, timing, and explanation
-#
-#     Raises:
-#         HTTPException: 404 if policy draft not found, 500 on evaluation error
-#     """
-#     logger.info(
-#         "Simulating single test case against policy draft %s",
-#         request.policy_draft_id,
-#     )
-#
-#     try:
-#         result = await sandbox.simulate_single(
-#             policy_draft_id=request.policy_draft_id,
-#             test_case=request.test_case,
-#             include_explanation=request.include_explanation,
-#         )
-#
-#         logger.info(
-#             "Simulation complete: test_case=%s, passed=%s, duration=%.1fms",
-#             result.test_case_id,
-#             result.passed,
-#             result.execution_time_ms,
-#         )
-#
-#         return result
-#
-#     except ValueError as e:
-#         logger.error("Policy draft not found: %s", e)
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail=f"Policy draft not found: {request.policy_draft_id}",
-#         ) from e
-#
-#     except Exception as e:
-#         logger.error("Simulation failed: %s", e, exc_info=True)
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Simulation failed: {str(e)}",
-#         ) from e
-#
 
 
 @router.post(
@@ -167,6 +90,7 @@ router = APIRouter(
 async def run_batch_tests(
     request: BatchSimulateRequest,
     sandbox: SandboxService = Depends(get_sandbox_service),
+    current_user=Depends(get_current_user),
 ) -> BatchSimulationResult:
     """Execute multiple test cases in batch.
 
@@ -252,6 +176,7 @@ async def run_batch_tests(
 async def run_regression_tests(
     request: RegressionTestRequest,
     sandbox: SandboxService = Depends(get_sandbox_service),
+    current_user=Depends(get_current_user),
 ) -> RegressionReport:
     """Run regression tests against historical decisions.
 
@@ -336,6 +261,7 @@ async def run_regression_tests(
 async def create_test_suite(
     test_suite: TestSuite,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ) -> TestSuite:
     """Create a new test suite.
 
@@ -352,8 +278,7 @@ async def create_test_suite(
     logger.info("Creating test suite: %s", test_suite.name)
 
     try:
-        # TODO: Implement database storage
-        # For now, just return the test suite with generated ID
+        # Database storage not yet implemented - returning input as-is
         logger.warning("Test suite storage not implemented - returning input")
         return test_suite
 
@@ -375,6 +300,7 @@ async def create_test_suite(
 async def get_test_suite(
     suite_id: str,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ) -> TestSuite:
     """Get a test suite by ID.
 
@@ -391,7 +317,7 @@ async def get_test_suite(
     logger.info("Fetching test suite: %s", suite_id)
 
     try:
-        # TODO: Implement database query
+        # Database query not yet implemented
         logger.warning("Test suite retrieval not implemented")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -418,6 +344,7 @@ async def get_test_suite(
 async def list_test_suites(
     tags: Optional[str] = None,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ) -> list[TestSuite]:
     """List all test suites.
 
@@ -434,7 +361,7 @@ async def list_test_suites(
     logger.info("Listing test suites, tags=%s", tags)
 
     try:
-        # TODO: Implement database query
+        # Database query not yet implemented
         logger.warning("Test suite listing not implemented")
         return []
 
@@ -458,7 +385,11 @@ async def list_test_suites(
     description="Check if the sandbox service is operational.",
 )
 async def health_check() -> dict:
-    """Health check endpoint.
+    """Liveness health check endpoint.
+
+    This is a liveness-only probe: it verifies the sandbox service is
+    responsive. It does not perform deep dependency checks (e.g. database
+    connectivity or PDP engine availability).
 
     Returns:
         Health status dictionary
@@ -466,7 +397,8 @@ async def health_check() -> dict:
     return {
         "status": "healthy",
         "service": "sandbox",
-        "version": "1.0.0",
+        "version": SANDBOX_SERVICE_VERSION,
+        "check_type": "liveness",
     }
 
 
@@ -483,8 +415,8 @@ async def service_info() -> dict:
         Service information dictionary
     """
     return {
-        "name": "Policy Testing Sandbox",
-        "version": "1.0.0",
+        "name": SANDBOX_SERVICE_NAME,
+        "version": SANDBOX_SERVICE_VERSION,
         "capabilities": [
             "single_simulation",
             "batch_simulation",
@@ -498,10 +430,6 @@ async def service_info() -> dict:
             "historical_replay": True,
         },
     }
-
-
-# Add this to mcpgateway/routes/sandbox.py
-# Place after the existing POST /sandbox/simulate endpoint
 
 
 @router.post("/sandbox/simulate", response_class=HTMLResponse)
@@ -525,8 +453,22 @@ async def simulate_form_submit(
     It returns HTML that will be injected into the results container.
     """
     try:
-        # Parse roles (comma-separated)
+        # Validate and sanitize form inputs
+        _validate_sandbox_form_input(policy_draft_id, "policy_draft_id")
+        _validate_sandbox_form_input(subject_email, "subject_email")
+        _validate_sandbox_form_input(action, "action")
+        _validate_sandbox_form_input(resource_type, "resource_type")
+        _validate_sandbox_form_input(resource_id, "resource_id")
+        _validate_sandbox_form_input(expected_decision, "expected_decision")
+        if subject_team_id:
+            _validate_sandbox_form_input(subject_team_id, "subject_team_id")
+        if resource_server:
+            _validate_sandbox_form_input(resource_server, "resource_server")
+
+        # Parse and validate roles (comma-separated)
         roles = [r.strip() for r in subject_roles.split(",") if r.strip()]
+        for role in roles:
+            _validate_sandbox_form_input(role, "role")
 
         # Create test case from form data
         # First-Party
@@ -560,6 +502,50 @@ async def simulate_form_submit(
         # Render template response with auto-escaping
         return request.app.state.templates.TemplateResponse(request, "sandbox_simulate_results.html", {"result": result})
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error running simulation")
         return request.app.state.templates.TemplateResponse(request, "sandbox_simulate_error.html", {"error_message": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Input Validation Helpers
+# ---------------------------------------------------------------------------
+
+# Regex pattern for allowed sandbox form input characters:
+# alphanumeric, hyphens, underscores, dots, @, spaces
+_SANDBOX_INPUT_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.@\s]+$")
+_SANDBOX_INPUT_MAX_LENGTH = 256
+
+
+def _validate_sandbox_form_input(value: str, field_name: str) -> None:
+    """Validate and sanitize a sandbox form input value.
+
+    Ensures the value is non-empty, within length limits, and contains
+    only safe characters to prevent injection attacks.
+
+    Args:
+        value: The input string to validate
+        field_name: Name of the field (for error messages)
+
+    Raises:
+        HTTPException: 422 if validation fails
+    """
+    if not value or not value.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Field '{field_name}' must not be empty",
+        )
+
+    if len(value) > _SANDBOX_INPUT_MAX_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Field '{field_name}' exceeds maximum length of {_SANDBOX_INPUT_MAX_LENGTH}",
+        )
+
+    if not _SANDBOX_INPUT_PATTERN.match(value):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Field '{field_name}' contains invalid characters. Only alphanumeric, hyphens, underscores, dots, @, and spaces are allowed.",
+        )

@@ -12,8 +12,8 @@ executes test cases, and compares results against expectations.
 
 Related to Issue #2226: Policy testing and simulation sandbox
 
-NOTE: Database integration uses mock data for now. See TODO comments for
-future database implementation.
+NOTE: Database integration uses mock data for now. Mock data will be replaced
+with actual database queries when the relevant tables are implemented.
 """
 
 # Future
@@ -57,6 +57,10 @@ from ..schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Maximum number of mock historical decisions to generate for performance.
+# Used when database integration is not yet available.
+MAX_MOCK_DECISIONS = 50
 
 
 class SandboxService:
@@ -184,7 +188,10 @@ class SandboxService:
 
         finally:
             # 7. Cleanup PDP resources
-            await pdp.close()
+            try:
+                await pdp.close()
+            except Exception as close_err:
+                logger.warning("Error closing sandbox PDP instance: %s", close_err)
 
     async def run_batch(
         self,
@@ -385,12 +392,12 @@ class SandboxService:
         Raises:
             ValueError: If draft not found
         """
-        # TODO: Replace with actual database query when policy_drafts table exists
-        # Example query:
-        # draft = self.db.query(PolicyDraft).filter_by(id=policy_draft_id).first()
-        # if not draft:
-        #     raise ValueError(f"Policy draft not found: {policy_draft_id}")
-        # return self._convert_draft_to_config(draft)
+        # Database table for policy drafts not yet implemented.
+        # When policy_drafts table is available, replace mock logic with:
+        #   draft = self.db.query(PolicyDraft).filter_by(id=policy_draft_id).first()
+        #   if not draft:
+        #       raise ValueError(f"Policy draft not found: {policy_draft_id}")
+        #   return self._convert_draft_to_config(draft)
 
         logger.info(
             "Loading policy draft %s (using mock data - database table not yet implemented)",
@@ -501,23 +508,19 @@ class SandboxService:
         Returns:
             List of historical decisions
         """
-        # TODO: Replace with actual database query when audit tables are properly set up
-        # Example query using AuditTrail table:
-        # cutoff_date = datetime.now(timezone.utc) - timedelta(days=replay_last_days)
-        #
-        # query = self.db.query(AuditTrail).filter(
-        #     AuditTrail.timestamp >= cutoff_date,
-        #     AuditTrail.action.like('%policy%'),  # Filter for policy decisions
-        # )
-        #
-        # if filter_by_subject:
-        #     query = query.filter(AuditTrail.user_email == filter_by_subject)
-        # if filter_by_action:
-        #     query = query.filter(AuditTrail.action == filter_by_action)
-        #
-        # audit_records = query.order_by(AuditTrail.timestamp.desc()).limit(sample_size).all()
-        #
-        # return [self._convert_audit_to_historical(record) for record in audit_records]
+        # Audit table integration not yet implemented.
+        # When audit tables are set up, replace mock logic with:
+        #   cutoff_date = datetime.now(timezone.utc) - timedelta(days=replay_last_days)
+        #   query = self.db.query(AuditTrail).filter(
+        #       AuditTrail.timestamp >= cutoff_date,
+        #       AuditTrail.action.like('%policy%'),
+        #   )
+        #   if filter_by_subject:
+        #       query = query.filter(AuditTrail.user_email == filter_by_subject)
+        #   if filter_by_action:
+        #       query = query.filter(AuditTrail.action == filter_by_action)
+        #   audit_records = query.order_by(AuditTrail.timestamp.desc()).limit(sample_size).all()
+        #   return [self._convert_audit_to_historical(record) for record in audit_records]
 
         logger.info(
             "Fetching historical decisions for %s (using mock data - database query not yet implemented)",
@@ -550,7 +553,7 @@ class SandboxService:
                 policy_version=baseline_policy_version,
                 timestamp=datetime.now(timezone.utc) - timedelta(days=i % replay_last_days),
             )
-            for i in range(min(sample_size, 50))  # Limit mock data to 50 for performance
+            for i in range(min(sample_size, MAX_MOCK_DECISIONS))
         ]
 
         # Apply filters
