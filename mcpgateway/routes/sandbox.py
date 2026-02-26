@@ -23,13 +23,11 @@ from typing import Optional
 # Third-Party
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
-from sqlalchemy.orm import Session
 
 # First-Party
 from mcpgateway.auth import get_current_user
 
 # Local
-from ..db import get_db
 from ..schemas import (
     BatchSimulateRequest,
     BatchSimulationResult,
@@ -68,12 +66,12 @@ router = APIRouter(
     summary="Execute batch test cases",
     description="""
     Execute multiple test cases in batch against a policy draft.
-    
+
     Tests can be executed in parallel (faster) or sequentially (deterministic).
     Returns aggregated statistics and individual results.
-    
+
     **Use case**: Run a full test suite before deploying a policy change.
-    
+
     **Example**:
     ```json
     {
@@ -97,6 +95,7 @@ async def run_batch_tests(
     Args:
         request: Batch simulation request with test cases
         sandbox: Injected sandbox service
+        current_user: Authenticated user from JWT dependency
 
     Returns:
         BatchSimulationResult with summary statistics and individual results
@@ -150,12 +149,12 @@ async def run_batch_tests(
     summary="Run regression tests",
     description="""
     Run regression tests by replaying historical production decisions.
-    
+
     Fetches historical decisions from audit logs and replays them against
     the policy draft to identify regressions (unintended behavior changes).
-    
+
     **Use case**: Verify a policy change doesn't break existing access patterns.
-    
+
     **Example**:
     ```json
     {
@@ -165,7 +164,7 @@ async def run_batch_tests(
         "sample_size": 1000
     }
     ```
-    
+
     Returns a report with:
     - Total decisions replayed
     - Number of regressions found
@@ -183,6 +182,7 @@ async def run_regression_tests(
     Args:
         request: Regression test request with parameters
         sandbox: Injected sandbox service
+        current_user: Authenticated user from JWT dependency
 
     Returns:
         RegressionReport with comparisons and regression analysis
@@ -244,9 +244,9 @@ async def run_regression_tests(
     summary="Create test suite",
     description="""
     Create a new test suite with a collection of test cases.
-    
+
     Test suites allow organizing related test cases together for reuse.
-    
+
     **Example**:
     ```json
     {
@@ -260,14 +260,15 @@ async def run_regression_tests(
 )
 async def create_test_suite(
     test_suite: TestSuite,
-    db: Session = Depends(get_db),
+    sandbox: SandboxService = Depends(get_sandbox_service),
     current_user=Depends(get_current_user),
 ) -> TestSuite:
     """Create a new test suite.
 
     Args:
         test_suite: Test suite to create
-        db: Database session
+        sandbox: Injected sandbox service
+        current_user: Authenticated user
 
     Returns:
         Created test suite with generated ID
@@ -278,9 +279,8 @@ async def create_test_suite(
     logger.info("Creating test suite: %s", test_suite.name)
 
     try:
-        # Database storage not yet implemented - returning input as-is
-        logger.warning("Test suite storage not implemented - returning input")
-        return test_suite
+        created_by = getattr(current_user, "email", None) or getattr(current_user, "username", "unknown")
+        return sandbox.create_test_suite(test_suite, created_by=created_by)
 
     except Exception as e:
         logger.error("Failed to create test suite: %s", e, exc_info=True)
@@ -299,14 +299,15 @@ async def create_test_suite(
 )
 async def get_test_suite(
     suite_id: str,
-    db: Session = Depends(get_db),
+    sandbox: SandboxService = Depends(get_sandbox_service),
     current_user=Depends(get_current_user),
 ) -> TestSuite:
     """Get a test suite by ID.
 
     Args:
         suite_id: Test suite ID
-        db: Database session
+        sandbox: Injected sandbox service
+        current_user: Authenticated user
 
     Returns:
         Test suite
@@ -317,12 +318,13 @@ async def get_test_suite(
     logger.info("Fetching test suite: %s", suite_id)
 
     try:
-        # Database query not yet implemented
-        logger.warning("Test suite retrieval not implemented")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Test suite not found: {suite_id}",
-        )
+        suite = sandbox.get_test_suite(suite_id)
+        if not suite:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Test suite not found: {suite_id}",
+            )
+        return suite
 
     except HTTPException:
         raise
@@ -343,14 +345,15 @@ async def get_test_suite(
 )
 async def list_test_suites(
     tags: Optional[str] = None,
-    db: Session = Depends(get_db),
+    sandbox: SandboxService = Depends(get_sandbox_service),
     current_user=Depends(get_current_user),
 ) -> list[TestSuite]:
     """List all test suites.
 
     Args:
         tags: Comma-separated tags to filter by
-        db: Database session
+        sandbox: Injected sandbox service
+        current_user: Authenticated user
 
     Returns:
         List of test suites
@@ -361,9 +364,8 @@ async def list_test_suites(
     logger.info("Listing test suites, tags=%s", tags)
 
     try:
-        # Database query not yet implemented
-        logger.warning("Test suite listing not implemented")
-        return []
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+        return sandbox.list_test_suites(tags=tag_list)
 
     except Exception as e:
         logger.error("Failed to list test suites: %s", e, exc_info=True)
@@ -451,6 +453,26 @@ async def simulate_form_submit(
 
     This endpoint is called via HTMX when the simulation form is submitted.
     It returns HTML that will be injected into the results container.
+
+    Args:
+        request: The incoming HTTP request
+        policy_draft_id: ID of the policy draft to test
+        subject_email: Email of the subject being tested
+        subject_roles: Comma-separated roles for the subject
+        subject_team_id: Optional team ID for the subject
+        action: The action being tested (e.g. 'tools.invoke')
+        resource_type: Type of resource (e.g. 'tool', 'prompt')
+        resource_id: ID of the resource being accessed
+        resource_server: Optional server hosting the resource
+        expected_decision: Expected outcome ('allow' or 'deny')
+        sandbox: Injected sandbox service
+        current_user: Authenticated user from JWT dependency
+
+    Returns:
+        TemplateResponse with simulation results or error HTML
+
+    Raises:
+        HTTPException: Re-raised if caught during processing
     """
     try:
         # Validate and sanitize form inputs
@@ -514,8 +536,8 @@ async def simulate_form_submit(
 # ---------------------------------------------------------------------------
 
 # Regex pattern for allowed sandbox form input characters:
-# alphanumeric, hyphens, underscores, dots, @, spaces
-_SANDBOX_INPUT_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.@\s]+$")
+# alphanumeric, hyphens, underscores, dots, @, literal spaces (not \s to exclude \n, \r, \t)
+_SANDBOX_INPUT_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.@ ]+$")
 _SANDBOX_INPUT_MAX_LENGTH = 256
 
 

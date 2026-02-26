@@ -44,7 +44,7 @@ from mcpgateway.config import settings
 from mcpgateway.utils.base_models import BaseModelWithConfigDict
 from mcpgateway.utils.services_auth import decode_auth, encode_auth
 from mcpgateway.validation.tags import validate_tags_field
-from plugins.unified_pdp.pdp_models import AccessDecision, CombinationMode, Context, Decision, DecisionExplanation, EngineDecision, EngineType, Resource, Subject
+from plugins.unified_pdp.pdp_models import AccessDecision, Context, Decision, DecisionExplanation, Resource, Subject
 
 logger = logging.getLogger(__name__)
 
@@ -7697,6 +7697,8 @@ class TestCase(BaseModel):
     tags: List[str] = Field(default_factory=list, description="Tags for organizing tests (e.g., ['regression', 'rbac'])")
 
     class Config:
+        """Pydantic model configuration for TestCase."""
+
         json_schema_extra = {
             "example": {
                 "subject": {"email": "developer@example.com", "roles": ["developer"], "team_id": "engineering"},
@@ -7735,6 +7737,8 @@ class TestSuite(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Config:
+        """Pydantic model configuration for TestSuite."""
+
         json_schema_extra = {"example": {"name": "developer-rbac-tests", "description": "Role-based access control tests for developer role", "test_cases": [], "tags": ["rbac", "developers"]}}
 
 
@@ -7774,6 +7778,8 @@ class SimulationResult(BaseModel):
     reason: str = Field(default="", description="Human-readable reason for the decision")
 
     class Config:
+        """Pydantic model configuration for SimulationResult."""
+
         json_schema_extra = {
             "example": {
                 "test_case_id": "tc-12345",
@@ -7823,6 +7829,8 @@ class BatchSimulationResult(BaseModel):
     completed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Config:
+        """Pydantic model configuration for BatchSimulationResult."""
+
         json_schema_extra = {
             "example": {
                 "policy_draft_id": "draft-123",
@@ -7904,6 +7912,8 @@ class DecisionComparison(BaseModel):
     policy_changes: List[str] = Field(default_factory=list, description="Policies that changed behavior")
 
     class Config:
+        """Pydantic model configuration for DecisionComparison."""
+
         json_schema_extra = {
             "example": {
                 "historical_id": "hist-789",
@@ -7961,6 +7971,8 @@ class RegressionReport(BaseModel):
     duration_ms: float = Field(..., description="Total regression test execution time")
 
     class Config:
+        """Pydantic model configuration for RegressionReport."""
+
         json_schema_extra = {
             "example": {
                 "policy_draft_id": "draft-123",
