@@ -32,6 +32,7 @@ nav:
   - sso-okta-tutorial.md
   - sso-generic-oidc-tutorial.md
   - rbac.md
+  - sandbox.md
   - teams.md
   - ui-customization.md
   - upgrade.md

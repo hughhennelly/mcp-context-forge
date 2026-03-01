@@ -79,6 +79,11 @@ class SidebarComponent:
         """MCP Registry tab button."""
         return self.page.locator("#tab-mcp-registry")
 
+    @property
+    def sandbox_tab(self) -> Locator:
+        """Policy Testing Sandbox tab button."""
+        return self.page.locator('[data-testid="sandbox-tab"]')
+
     # ==================== Navigation Methods ====================
 
     def click_servers_tab(self) -> None:
@@ -144,6 +149,11 @@ class SidebarComponent:
         """Click on MCP Registry tab and wait for panel."""
         self.registry_tab.click()
         self.page.wait_for_selector("#mcp-registry-panel:not(.hidden)")
+
+    def click_sandbox_tab(self) -> None:
+        """Click on Sandbox tab and wait for panel."""
+        self.sandbox_tab.click()
+        self.page.wait_for_selector("#sandbox-panel:not(.hidden)")
 
     def click_tab_by_id(self, tab_id: str, panel_id: str = None) -> None:
         """Click on any tab by its ID and wait for corresponding panel.

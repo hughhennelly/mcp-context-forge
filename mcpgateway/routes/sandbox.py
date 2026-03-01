@@ -494,7 +494,7 @@ async def simulate_form_submit(
 
         # Create test case from form data
         # First-Party
-        from mcpgateway.schemas.sandbox import TestCase
+        from mcpgateway.schemas import TestCase
         from plugins.unified_pdp.pdp_models import Context, Decision, Resource, Subject
 
         test_case = TestCase(
