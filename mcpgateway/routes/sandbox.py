@@ -45,7 +45,7 @@ SANDBOX_SERVICE_NAME = "Policy Testing Sandbox"
 
 # Create router with prefix and tags
 router = APIRouter(
-    prefix="/sandbox",
+    prefix="",
     tags=["Policy Sandbox"],
     responses={
         404: {"description": "Policy draft or test suite not found"},
@@ -434,7 +434,7 @@ async def service_info() -> dict:
     }
 
 
-@router.post("/sandbox/simulate", response_class=HTMLResponse)
+@router.post("/simulate", response_class=HTMLResponse)
 async def simulate_form_submit(
     request: Request,
     current_user=Depends(get_current_user),
